@@ -2,12 +2,16 @@ import http from "http";
 import type { CenterConfig } from "./config.js";
 import { registry } from "./metrics.js";
 import type { Storage, CostFilters } from "./storage/index.js";
+import type { PubSub } from "./pubsub/index.js";
 import { generateRecommendations } from "./recommendations/engine.js";
 import { DASHBOARD_HTML } from "./dashboard-html.js";
+import { createGraphQLHandler } from "./graphql.js";
 
 let server: http.Server | null = null;
 
-export function startHttpServer(config: CenterConfig, storage: Storage): http.Server {
+export function startHttpServer(config: CenterConfig, storage: Storage, pubsub: PubSub): http.Server {
+  const yoga = createGraphQLHandler(storage, pubsub);
+
   server = http.createServer(async (req, res) => {
     const url = req.url?.split("?")[0] ?? "/";
     const params = new URL(req.url ?? "/", `http://localhost:${config.httpPort}`).searchParams;
@@ -74,6 +78,12 @@ export function startHttpServer(config: CenterConfig, storage: Storage): http.Se
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: String(err) }));
       }
+      return;
+    }
+
+    // GraphQL endpoint (handled by graphql-yoga)
+    if (url.startsWith("/graphql")) {
+      yoga.handle(req, res);
       return;
     }
 

@@ -145,7 +145,7 @@ async function setup() {
   }
 
   startWsServer(config, storage, pubsub);
-  startHttpServer(config, storage);
+  startHttpServer(config, storage, pubsub);
   await delay(500); // let servers start
 }
 

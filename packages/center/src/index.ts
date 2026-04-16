@@ -24,7 +24,7 @@ const storage = await createStorage(config);
 const pubsub = await createPubSub(config);
 
 startWsServer(config, storage, pubsub);
-startHttpServer(config, storage);
+startHttpServer(config, storage, pubsub);
 
 console.log("[center] Ready.");
 
