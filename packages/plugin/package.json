@@ -1,0 +1,57 @@
+{
+  "name": "@flow-a2a/plugin",
+  "version": "0.1.3",
+  "description": "OpenClaw plugin — Agent communication + LLM cost tracking + telemetry reporting",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/454076513/flow-a2a.git",
+    "directory": "packages/plugin"
+  },
+  "homepage": "https://github.com/454076513/flow-a2a#readme",
+  "keywords": [
+    "flow-a2a",
+    "a2a",
+    "agent-to-agent",
+    "openclaw",
+    "openclaw-plugin",
+    "llm",
+    "cost-tracking",
+    "telemetry",
+    "websocket"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@flow-a2a/shared": "workspace:*",
+    "@sinclair/typebox": "^0.34.48",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

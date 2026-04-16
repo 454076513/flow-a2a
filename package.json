@@ -1,0 +1,20 @@
+{
+  "private": true,
+  "name": "flow-a2a",
+  "description": "Agent-to-Agent Communication & Billing — OpenClaw plugin + Center service",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm --filter @flow-a2a/center exec tsx test/integration.ts",
+    "test:e2e": "bash e2e/e2e.sh",
+    "clean": "pnpm -r exec rm -rf dist",
+    "dev:center": "pnpm --filter @flow-a2a/center dev",
+    "docker:build": "docker build -f packages/center/Dockerfile -t flow-a2a-center:local .",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "prepare:plugin": "bash packages/plugin/scripts/prepare.sh",
+    "release": "pnpm build && pnpm -r publish --no-git-checks"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

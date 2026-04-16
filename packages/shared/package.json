@@ -1,0 +1,41 @@
+{
+  "name": "@flow-a2a/shared",
+  "version": "0.1.1",
+  "description": "Shared types, protocol definitions, and pricing logic for Flow-A2A",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/454076513/flow-a2a.git",
+    "directory": "packages/shared"
+  },
+  "homepage": "https://github.com/454076513/flow-a2a#readme",
+  "keywords": [
+    "flow-a2a",
+    "a2a",
+    "agent-to-agent",
+    "llm",
+    "cost-tracking",
+    "openclaw"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

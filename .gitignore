@@ -1,0 +1,20 @@
+node_modules/
+dist/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+
+# Build artifacts
+.build/
+
+# Test runtime data (configs, sessions, databases)
+test/data/
+test/openclaw-config/
+test/openclaw-config-2/
+*.sqlite
+*.bak
+
+# Environment
+.env
+.env.*

@@ -1,0 +1,438 @@
+export const DASHBOARD_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow-A2A Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#0a0e17; --surface:#111827; --surface2:#1a2332; --raised:#1e293b;
+  --border:#1e293b; --text:#e2e8f0; --text-dim:#64748b; --text-muted:#475569;
+  --accent:#3b82f6; --accent-dim:rgba(59,130,246,.12);
+  --green:#22c55e; --green-dim:rgba(34,197,94,.12);
+  --amber:#f59e0b; --amber-dim:rgba(245,158,11,.12);
+  --red:#ef4444; --red-dim:rgba(239,68,68,.12);
+  --purple:#a78bfa; --pink:#f472b6; --cyan:#06b6d4; --orange:#f97316;
+}
+body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+/* Header */
+.header { display:flex; align-items:center; justify-content:space-between; padding:12px 24px; background:var(--surface); border-bottom:1px solid var(--border); }
+.header h1 { font-size:16px; font-weight:600; }
+.header h1 span { color:var(--accent); }
+.tabs { display:flex; gap:4px; }
+.tab { padding:6px 16px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; color:var(--text-dim); background:transparent; border:none; transition:all .15s; }
+.tab:hover { color:var(--text); background:var(--surface2); }
+.tab.active { color:var(--accent); background:var(--accent-dim); }
+.status-dot { width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block; margin-right:6px; }
+.status-dot.online { background:var(--green); }
+.status { font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:8px; }
+
+/* Panels */
+.panel { flex:1; display:none; overflow:hidden; }
+.panel.active { display:flex; }
+
+/* ── Chat Panel ── */
+.chat-panel { display:flex; height:100%; }
+.sidebar { width:220px; border-right:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; }
+.sidebar-title { padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-dim); border-bottom:1px solid var(--border); }
+.agent-list { flex:1; overflow-y:auto; padding:8px; }
+.agent-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; margin-bottom:2px; }
+.agent-item:hover { background:var(--surface2); }
+.agent-avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; background:var(--surface2); }
+.agent-name { font-size:13px; font-weight:500; }
+.agent-id { font-size:11px; color:var(--text-dim); }
+.chat-main { flex:1; display:flex; flex-direction:column; }
+.messages { flex:1; overflow-y:auto; padding:16px 24px; }
+.msg { margin-bottom:12px; }
+.msg-header { display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+.msg-author { font-size:13px; font-weight:600; }
+.msg-badge { font-size:10px; padding:1px 6px; border-radius:3px; font-weight:600; text-transform:uppercase; }
+.msg-badge.lobby { background:var(--accent-dim); color:var(--accent); }
+.msg-badge.dm { background:var(--green-dim); color:var(--green); }
+.msg-badge.feishu { background:var(--amber-dim); color:var(--amber); }
+.msg-badge.system { background:var(--surface2); color:var(--text-dim); }
+.msg-time { font-size:11px; color:var(--text-muted); }
+.msg-text { font-size:14px; line-height:1.5; padding-left:0; white-space:pre-wrap; word-break:break-word; }
+.msg-text.system { color:var(--text-dim); font-style:italic; font-size:12px; }
+.chat-input { display:flex; gap:8px; padding:12px 24px; border-top:1px solid var(--border); background:var(--surface); }
+.chat-input input { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; color:var(--text); font-size:13px; outline:none; }
+.chat-input input:focus { border-color:var(--accent); }
+.chat-input button { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 16px; font-size:13px; font-weight:500; cursor:pointer; }
+.chat-input button:hover { opacity:.9; }
+
+/* ── Costs Panel ── */
+.costs-panel { flex-direction:column; overflow-y:auto; padding:24px; gap:20px; }
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; }
+.kpi-label { font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.3px; margin-bottom:4px; }
+.kpi-value { font-size:24px; font-weight:700; font-family:'JetBrains Mono',monospace; }
+.kpi-value.cost { color:var(--green); }
+.kpi-value.tokens { color:var(--cyan); }
+.kpi-value.calls { color:var(--accent); }
+
+.section-title { font-size:14px; font-weight:600; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+.tables-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:900px) { .tables-grid { grid-template-columns:1fr; } }
+
+table { width:100%; border-collapse:collapse; font-size:13px; background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+th { text-align:left; padding:10px 12px; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--text-dim); background:var(--surface2); border-bottom:1px solid var(--border); }
+td { padding:8px 12px; border-bottom:1px solid var(--border); }
+tr:last-child td { border-bottom:none; }
+td.mono { font-family:'JetBrains Mono',monospace; font-size:12px; }
+td.cost { color:var(--green); font-weight:600; }
+td.tokens { color:var(--cyan); }
+
+.trigger-section { margin-top:4px; }
+.trigger-table { width:100%; }
+.trigger-badge { font-size:10px; padding:2px 6px; border-radius:3px; font-weight:600; }
+.trigger-badge.feishu { background:var(--amber-dim); color:var(--amber); }
+.trigger-badge.reef-dm { background:var(--green-dim); color:var(--green); }
+.trigger-badge.reef-lobby { background:var(--accent-dim); color:var(--accent); }
+.trigger-badge.api { background:var(--surface2); color:var(--text-dim); }
+
+.chart-container { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; }
+.chart-wrap { max-height:250px; position:relative; }
+
+.empty { color:var(--text-dim); font-size:13px; padding:20px; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>Flow-A2A</span> Dashboard</h1>
+  <div class="tabs">
+    <button class="tab active" onclick="showPanel('chat')">Chat</button>
+    <button class="tab" onclick="showPanel('costs')">Costs</button>
+  </div>
+  <div class="status">
+    <span class="status-dot" id="wsDot"></span>
+    <span id="wsStatus">Connecting...</span>
+    <span id="agentCount"></span>
+  </div>
+</div>
+
+<!-- Chat Panel -->
+<div class="panel chat-panel active" id="panel-chat">
+  <div class="sidebar">
+    <div class="sidebar-title">Online Agents</div>
+    <div class="agent-list" id="agentList"></div>
+  </div>
+  <div class="chat-main">
+    <div class="messages" id="messages"></div>
+    <div class="chat-input">
+      <input id="msgInput" placeholder="Type a lobby message..." onkeydown="if(event.key==='Enter')sendLobby()">
+      <button onclick="sendLobby()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Costs Panel -->
+<div class="panel costs-panel" id="panel-costs">
+  <div style="display:flex;gap:12px;padding:12px 24px 0;align-items:center;flex-wrap:wrap">
+    <label style="font-size:12px;color:var(--text-dim)">Filter:</label>
+    <select id="filterChannel" onchange="refreshCosts()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12px">
+      <option value="">All Channels</option>
+      <option value="feishu">Feishu</option>
+      <option value="reef">Reef (A2A)</option>
+      <option value="gateway">Gateway API</option>
+    </select>
+    <select id="filterScope" onchange="refreshCosts()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12px">
+      <option value="">All Scopes</option>
+      <option value="group">Group</option>
+      <option value="p2p">P2P / DM</option>
+      <option value="lobby">Lobby</option>
+      <option value="dm">DM</option>
+    </select>
+  </div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="tables-grid">
+    <div>
+      <div class="section-title">Cost by Agent</div>
+      <div id="agentTable"></div>
+    </div>
+    <div>
+      <div class="section-title">Cost by Model</div>
+      <div id="modelTable"></div>
+    </div>
+  </div>
+  <div class="trigger-section">
+    <div class="section-title">Cost by Trigger User</div>
+    <div id="triggerTable"></div>
+  </div>
+  <div class="tables-grid" style="margin-top:8px">
+    <div>
+      <div class="section-title">Cost by Channel</div>
+      <div id="channelTable"></div>
+    </div>
+    <div>
+      <div class="section-title">Cost by Conversation</div>
+      <div id="conversationTable"></div>
+    </div>
+  </div>
+  <div class="chart-container" style="margin-top:8px">
+    <div class="section-title">Model Cost Distribution</div>
+    <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+const WS_PORT = location.port || '9876';
+const WS_URL = 'ws://' + location.hostname + ':' + WS_PORT;
+const API_BASE = location.origin;
+let ws = null;
+let connected = false;
+let agents = [];
+let modelChart = null;
+
+// ── Tab switching ──
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelector('.tab[onclick*="' + name + '"]').classList.add('active');
+  if (name === 'costs') refreshCosts();
+}
+
+// ── WebSocket ──
+function connectWs() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({
+      type: 'register',
+      lobsterId: 'dashboard-' + Date.now(),
+      name: 'Dashboard',
+      meta: { observer: true }
+    }));
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    dispatch(msg);
+  };
+  ws.onclose = () => {
+    connected = false;
+    updateStatus();
+    setTimeout(connectWs, 3000);
+  };
+  ws.onerror = () => {};
+}
+
+function dispatch(msg) {
+  switch(msg.type) {
+    case 'registered':
+      connected = true;
+      agents = msg.lobsters.filter(l => !l.meta?.observer);
+      updateStatus();
+      renderAgents();
+      break;
+    case 'lobby':
+      addMsg('lobby', msg.fromName, msg.text, msg.ts);
+      break;
+    case 'dm':
+      if (!msg.echo) addMsg('dm', msg.fromName, msg.text, msg.ts, msg.from);
+      break;
+    case 'feishu':
+      addMsg('feishu', msg.fromName, msg.text, msg.ts);
+      break;
+    case 'join':
+      agents = agents.filter(a => a.id !== msg.lobsterId);
+      agents.push({ id: msg.lobsterId, name: msg.name, connectedAt: msg.ts, groups: [] });
+      addMsg('system', '', msg.name + ' joined', msg.ts);
+      renderAgents();
+      updateStatus();
+      break;
+    case 'leave':
+      agents = agents.filter(a => a.id !== msg.lobsterId);
+      addMsg('system', '', msg.name + ' left', msg.ts);
+      renderAgents();
+      updateStatus();
+      break;
+    case 'history':
+      for (const m of msg.messages) dispatch(m);
+      break;
+    case 'who':
+      agents = msg.lobsters.filter(l => !l.meta?.observer);
+      renderAgents();
+      updateStatus();
+      break;
+  }
+}
+
+function sendLobby() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'lobby', text }));
+  input.value = '';
+}
+
+// ── Chat rendering ──
+const EMOJIS = ['🤖','🦾','🧠','🔮','⚡','🌊','🔥','🌿','💎','🎯','🦊','🐙','🦑','🐳','🐬'];
+function emoji(name) { let h=0; for(let i=0;i<name.length;i++) h=((h<<5)-h)+name.charCodeAt(i); return EMOJIS[Math.abs(h)%EMOJIS.length]; }
+
+function addMsg(type, author, text, ts, extra) {
+  const el = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const time = new Date(ts).toLocaleTimeString();
+  if (type === 'system') {
+    div.innerHTML = '<div class="msg-header"><span class="msg-badge system">sys</span><span class="msg-time">' + time + '</span></div><div class="msg-text system">' + esc(text) + '</div>';
+  } else {
+    const badge = type === 'dm' ? '<span class="msg-badge dm">DM' + (extra ? ' to ' + esc(extra) : '') + '</span>' : '<span class="msg-badge ' + type + '">' + type + '</span>';
+    div.innerHTML = '<div class="msg-header"><span class="msg-author">' + emoji(author) + ' ' + esc(author) + '</span>' + badge + '<span class="msg-time">' + time + '</span></div><div class="msg-text">' + esc(text) + '</div>';
+  }
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderAgents() {
+  const el = document.getElementById('agentList');
+  if (agents.length === 0) { el.innerHTML = '<div class="empty">No agents online</div>'; return; }
+  el.innerHTML = agents.map(a =>
+    '<div class="agent-item"><div class="agent-avatar">' + emoji(a.name) + '</div><div><div class="agent-name">' + esc(a.name) + '</div><div class="agent-id">' + esc(a.id) + '</div></div></div>'
+  ).join('');
+}
+
+function updateStatus() {
+  const dot = document.getElementById('wsDot');
+  const st = document.getElementById('wsStatus');
+  const cnt = document.getElementById('agentCount');
+  dot.className = 'status-dot' + (connected ? ' online' : '');
+  st.textContent = connected ? 'Connected' : 'Disconnected';
+  cnt.textContent = agents.length + ' agent' + (agents.length !== 1 ? 's' : '');
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// ── Costs ──
+function getFilterParams() {
+  const ch = document.getElementById('filterChannel')?.value || '';
+  const sc = document.getElementById('filterScope')?.value || '';
+  const p = new URLSearchParams();
+  if (ch) p.set('channel', ch);
+  if (sc) p.set('scope', sc);
+  return p.toString() ? '&' + p.toString() : '';
+}
+
+async function refreshCosts() {
+  try {
+    const fp = getFilterParams();
+    const [summary, byAgent, byModel, byTrigger, byChannel, byConversation] = await Promise.all([
+      fetch(API_BASE + '/api/summary').then(r=>r.json()),
+      fetch(API_BASE + '/api/costs/by-agent').then(r=>r.json()),
+      fetch(API_BASE + '/api/costs/by-model').then(r=>r.json()),
+      fetch(API_BASE + '/api/costs/by-trigger?since=0' + fp).then(r=>r.json()),
+      fetch(API_BASE + '/api/costs/by-channel').then(r=>r.json()),
+      fetch(API_BASE + '/api/costs/by-conversation').then(r=>r.json()),
+    ]);
+    renderKpis(summary);
+    renderAgentTable(byAgent);
+    renderModelTable(byModel);
+    renderTriggerTable(byTrigger);
+    renderChannelTable(byChannel);
+    renderConversationTable(byConversation);
+    renderModelChart(byModel);
+  } catch(e) { console.error('Cost refresh failed:', e); }
+}
+
+function renderKpis(s) {
+  document.getElementById('kpiGrid').innerHTML =
+    kpi('Total Cost', '$' + s.totalCostUsd.toFixed(4), 'cost') +
+    kpi('Input Tokens', fmtNum(s.totalInputTokens), 'tokens') +
+    kpi('Output Tokens', fmtNum(s.totalOutputTokens), 'tokens') +
+    kpi('LLM Calls', s.totalCalls, 'calls') +
+    kpi('Models', s.modelCount, '') +
+    kpi('Agents', s.agentCount, '');
+}
+function kpi(label, value, cls) {
+  return '<div class="kpi-card"><div class="kpi-label">' + label + '</div><div class="kpi-value ' + cls + '">' + value + '</div></div>';
+}
+function fmtNum(n) { return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n); }
+
+function renderAgentTable(data) {
+  if (!data.length) { document.getElementById('agentTable').innerHTML = '<div class="empty">No data</div>'; return; }
+  let html = '<table><tr><th>Agent</th><th>Cost</th><th>Calls</th><th>In Tokens</th><th>Out Tokens</th></tr>';
+  for (const r of data) html += '<tr><td>' + esc(r.agentName) + '</td><td class="mono cost">$' + r.costUsd.toFixed(4) + '</td><td class="mono">' + r.calls + '</td><td class="mono tokens">' + fmtNum(r.inputTokens) + '</td><td class="mono tokens">' + fmtNum(r.outputTokens) + '</td></tr>';
+  html += '</table>';
+  document.getElementById('agentTable').innerHTML = html;
+}
+
+function renderModelTable(data) {
+  if (!data.length) { document.getElementById('modelTable').innerHTML = '<div class="empty">No data</div>'; return; }
+  let html = '<table><tr><th>Model</th><th>Cost</th><th>Calls</th><th>In Tokens</th><th>Out Tokens</th></tr>';
+  for (const r of data) html += '<tr><td class="mono">' + esc(r.model) + '</td><td class="mono cost">$' + r.costUsd.toFixed(4) + '</td><td class="mono">' + r.calls + '</td><td class="mono tokens">' + fmtNum(r.inputTokens) + '</td><td class="mono tokens">' + fmtNum(r.outputTokens) + '</td></tr>';
+  html += '</table>';
+  document.getElementById('modelTable').innerHTML = html;
+}
+
+function renderTriggerTable(data) {
+  if (!data.length) { document.getElementById('triggerTable').innerHTML = '<div class="empty">No trigger user data yet</div>'; return; }
+  let html = '<table class="trigger-table"><tr><th>User</th><th>Channel</th><th>Scope</th><th>Cost</th><th>Calls</th><th>In Tokens</th><th>Out Tokens</th></tr>';
+  for (const r of data) {
+    const ch = r.channel || '-';
+    const sc = r.scope || '-';
+    const chBadge = '<span class="trigger-badge ' + ch + '">' + esc(ch) + '</span>';
+    const scBadge = '<span class="trigger-badge ' + sc + '">' + esc(sc) + '</span>';
+    html += '<tr><td>' + esc(r.triggerUser) + '</td><td>' + chBadge + '</td><td>' + scBadge + '</td><td class="mono cost">$' + r.costUsd.toFixed(4) + '</td><td class="mono">' + r.calls + '</td><td class="mono tokens">' + fmtNum(r.inputTokens||0) + '</td><td class="mono tokens">' + fmtNum(r.outputTokens||0) + '</td></tr>';
+  }
+  html += '</table>';
+  document.getElementById('triggerTable').innerHTML = html;
+}
+
+function renderChannelTable(data) {
+  const el = document.getElementById('channelTable');
+  if (!el) return;
+  if (!data.length) { el.innerHTML = '<div class="empty">No data</div>'; return; }
+  let html = '<table><tr><th>Channel</th><th>Scope</th><th>Cost</th><th>Calls</th><th>Users</th><th>In Tokens</th><th>Out Tokens</th></tr>';
+  for (const r of data) {
+    html += '<tr><td>' + esc(r.channel) + '</td><td>' + esc(r.scope||'-') + '</td><td class="mono cost">$' + r.costUsd.toFixed(4) + '</td><td class="mono">' + r.calls + '</td><td class="mono">' + r.userCount + '</td><td class="mono tokens">' + fmtNum(r.inputTokens) + '</td><td class="mono tokens">' + fmtNum(r.outputTokens) + '</td></tr>';
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function renderConversationTable(data) {
+  const el = document.getElementById('conversationTable');
+  if (!el) return;
+  if (!data.length) { el.innerHTML = '<div class="empty">No data</div>'; return; }
+  let html = '<table><tr><th>Conversation</th><th>Channel</th><th>Scope</th><th>Cost</th><th>Calls</th><th>Users</th></tr>';
+  for (const r of data) {
+    const name = r.conversationName ? esc(r.conversationName) : '<span style="color:var(--text-dim)">' + esc(r.conversationId) + '</span>';
+    html += '<tr><td>' + name + '</td><td>' + esc(r.channel||'-') + '</td><td>' + esc(r.scope||'-') + '</td><td class="mono cost">$' + r.costUsd.toFixed(4) + '</td><td class="mono">' + r.calls + '</td><td class="mono">' + r.userCount + '</td></tr>';
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function renderModelChart(data) {
+  const ctx = document.getElementById('modelChart');
+  if (modelChart) modelChart.destroy();
+  if (!data.length) return;
+  const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#a78bfa','#f472b6','#06b6d4','#f97316'];
+  modelChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => d.model),
+      datasets: [{ data: data.map(d => d.calls), backgroundColor: colors.slice(0, data.length), borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } } }
+    }
+  });
+}
+
+// ── Auto-refresh costs every 15s ──
+setInterval(() => {
+  if (document.getElementById('panel-costs').classList.contains('active')) refreshCosts();
+}, 15000);
+
+// ── Init ──
+connectWs();
+</script>
+</body>
+</html>`;
