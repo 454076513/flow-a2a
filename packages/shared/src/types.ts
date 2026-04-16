@@ -79,6 +79,8 @@ export interface TelemetryRecord {
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   costUsd?: number;
   costSource?: string; // "telemetry" | "calculated" | "estimated"
   trigger?: string;    // "user" | "tool-result" | "auto"
@@ -100,6 +102,18 @@ export interface TriggerUserInfo {
   conversationId?: string;
   conversationName?: string;
   ts: number; // when mapping was created, for TTL
+}
+
+// ─── Lobby Adapter Interface ────────────────────────────────────────────────
+
+// ─── Recommendation Types ──────────────────────────────────────────────────
+
+export interface Recommendation {
+  id: string;
+  title: string;
+  description: string;
+  estimatedSavingsUsd: number | null;
+  confidence: "high" | "medium" | "low";
 }
 
 // ─── Lobby Adapter Interface ────────────────────────────────────────────────

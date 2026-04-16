@@ -6,6 +6,7 @@ export type {
   ServerMessage,
   TelemetryRecord,
   TriggerUserInfo,
+  Recommendation,
   LobbyAdapter,
 } from "./types.js";
 

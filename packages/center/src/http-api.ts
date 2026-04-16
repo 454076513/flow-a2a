@@ -1,12 +1,13 @@
 import http from "http";
 import type { CenterConfig } from "./config.js";
 import { registry } from "./metrics.js";
-import { getSummary, getCostsByAgent, getCostsByModel, getCostsByTriggerUser, getCostsByChannel, getCostsByConversation, listAgents, type CostFilters } from "./storage/queries.js";
+import type { Storage, CostFilters } from "./storage/index.js";
+import { generateRecommendations } from "./recommendations/engine.js";
 import { DASHBOARD_HTML } from "./dashboard-html.js";
 
 let server: http.Server | null = null;
 
-export function startHttpServer(config: CenterConfig): http.Server {
+export function startHttpServer(config: CenterConfig, storage: Storage): http.Server {
   server = http.createServer(async (req, res) => {
     const url = req.url?.split("?")[0] ?? "/";
     const params = new URL(req.url ?? "/", `http://localhost:${config.httpPort}`).searchParams;
@@ -18,7 +19,7 @@ export function startHttpServer(config: CenterConfig): http.Server {
       // Inject the WS port so the dashboard JS can connect to the relay
       const html = DASHBOARD_HTML.replace(
         "const WS_PORT = location.port || '9876';",
-        `const WS_PORT = '${config.wsPort}';`
+        `const WS_PORT = '${config.wsPort}';`,
       );
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(html);
@@ -46,21 +47,27 @@ export function startHttpServer(config: CenterConfig): http.Server {
       model: params.get("model") || undefined,
     };
 
-    const routes: Record<string, () => unknown> = {
-      "/api/health": () => ({ status: "ok", ts: Date.now() }),
-      "/api/summary": () => getSummary(since),
-      "/api/agents": () => listAgents(),
-      "/api/costs/by-agent": () => getCostsByAgent(since),
-      "/api/costs/by-model": () => getCostsByModel(since),
-      "/api/costs/by-trigger": () => getCostsByTriggerUser(since, filters),
-      "/api/costs/by-channel": () => getCostsByChannel(since),
-      "/api/costs/by-conversation": () => getCostsByConversation(since),
+    const routes: Record<string, () => Promise<unknown>> = {
+      "/api/health": async () => ({ status: "ok", ts: Date.now() }),
+      "/api/summary": () => storage.getSummary(since),
+      "/api/agents": () => storage.listAgents(),
+      "/api/costs/by-agent": () => storage.getCostsByAgent(since),
+      "/api/costs/by-model": () => storage.getCostsByModel(since),
+      "/api/costs/by-trigger": () => storage.getCostsByTriggerUser(since, filters),
+      "/api/costs/by-channel": () => storage.getCostsByChannel(since),
+      "/api/costs/by-conversation": () => storage.getCostsByConversation(since),
+      "/api/costs/hourly": () => storage.getHourlySpend(since),
+      "/api/costs/yesterday": () => storage.getYesterdaySpend(),
+      "/api/costs/trend30": () => storage.getLast30DaysDailySpend(since),
+      "/api/costs/by-session": () => storage.getSessionBreakdown(20),
+      "/api/costs/by-trigger-type": () => storage.getTriggerBreakdown(since),
+      "/api/recommendations": () => generateRecommendations(storage),
     };
 
     const handler = routes[url];
     if (handler) {
       try {
-        const data = handler();
+        const data = await handler();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(data));
       } catch (err) {

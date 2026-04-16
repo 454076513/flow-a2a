@@ -85,6 +85,8 @@ export function recordLlmCost(agentName: string, instanceId: string, rec: Teleme
   llmCostTotal.inc({ agent: agentName, model, instance: instanceId, trigger_user: triggerUser, trigger_source: triggerSource, channel, scope }, costUsd);
   llmTokensTotal.inc({ agent: agentName, model, direction: "input", trigger_user: triggerUser, channel, scope }, rec.inputTokens ?? 0);
   llmTokensTotal.inc({ agent: agentName, model, direction: "output", trigger_user: triggerUser, channel, scope }, rec.outputTokens ?? 0);
+  llmTokensTotal.inc({ agent: agentName, model, direction: "cache_read", trigger_user: triggerUser, channel, scope }, rec.cacheReadTokens ?? 0);
+  llmTokensTotal.inc({ agent: agentName, model, direction: "cache_creation", trigger_user: triggerUser, channel, scope }, rec.cacheCreationTokens ?? 0);
   llmCallsTotal.inc({ agent: agentName, model, trigger_user: triggerUser, channel, scope });
   llmCostPerCall.observe({ agent: agentName, model }, costUsd);
 }

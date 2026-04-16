@@ -8,11 +8,13 @@
  */
 
 import WebSocket from "ws";
-import { initDb, closeDb } from "../src/storage/db.js";
+import { SqliteStorage } from "../src/storage/sqlite.js";
+import { PostgresStorage } from "../src/storage/postgres.js";
 import { startWsServer, stopWsServer } from "../src/ws-server.js";
 import { startHttpServer, stopHttpServer } from "../src/http-api.js";
 import type { CenterConfig } from "../src/config.js";
 import type { TelemetryRecord, ClientMessage, ServerMessage } from "../../shared/src/types.js";
+import type { Storage } from "../src/storage/index.js";
 import { registry } from "../src/metrics.js";
 import fs from "fs";
 import path from "path";
@@ -22,7 +24,10 @@ import os from "os";
 
 const WS_PORT = 19876;
 const HTTP_PORT = 13100;
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const USE_POSTGRES = DATABASE_URL.length > 0;
 let dbPath: string;
+let storage: Storage;
 
 function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
@@ -107,24 +112,37 @@ async function setup() {
   const config: CenterConfig = {
     wsPort: WS_PORT,
     httpPort: HTTP_PORT,
+    dbType: USE_POSTGRES ? "postgres" : "sqlite",
     dbPath,
+    postgresUrl: DATABASE_URL,
     relayToken: "",
     maxHistory: 100,
   };
 
-  initDb(dbPath);
-  startWsServer(config);
-  startHttpServer(config);
+  if (USE_POSTGRES) {
+    console.log(`[test] Using PostgreSQL: ${DATABASE_URL.replace(/:[^:@]*@/, ':***@')}`);
+    const pg = new PostgresStorage(DATABASE_URL);
+    await pg.init();
+    storage = pg;
+  } else {
+    console.log(`[test] Using SQLite: ${dbPath}`);
+    storage = new SqliteStorage(dbPath);
+  }
+
+  startWsServer(config, storage);
+  startHttpServer(config, storage);
   await delay(500); // let servers start
 }
 
 async function teardown() {
   stopWsServer();
   stopHttpServer();
-  closeDb();
-  try { fs.unlinkSync(dbPath); } catch {}
-  try { fs.unlinkSync(dbPath + "-wal"); } catch {}
-  try { fs.unlinkSync(dbPath + "-shm"); } catch {}
+  await storage.close();
+  if (!USE_POSTGRES) {
+    try { fs.unlinkSync(dbPath); } catch {}
+    try { fs.unlinkSync(dbPath + "-wal"); } catch {}
+    try { fs.unlinkSync(dbPath + "-shm"); } catch {}
+  }
 }
 
 // ─── Test 1: Telemetry Ingestion ────────────────────────────────────────────
@@ -304,11 +322,11 @@ async function test3_triggerUserAttribution() {
   const metrics = await httpGet("/metrics") as string;
   assert(
     metrics.includes('trigger_user="张三"'),
-    "Prometheus metric has trigger_user=张三 label"
+    "Prometheus metric has trigger_user=张三 label",
   );
   assert(
     metrics.includes('trigger_source="feishu"'),
-    "Prometheus metric has trigger_source=feishu label"
+    "Prometheus metric has trigger_source=feishu label",
   );
 
   ws.close();

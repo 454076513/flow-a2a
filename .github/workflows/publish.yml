@@ -40,7 +40,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: flowgpt/flow-a2a-center
+          images: 599040610/flow-a2a-center
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

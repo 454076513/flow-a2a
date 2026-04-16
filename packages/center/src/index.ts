@@ -4,23 +4,24 @@
  *
  * Standalone Node.js process:
  * - WebSocket relay (agent communication + telemetry ingestion)
- * - SQLite storage (cost data)
+ * - SQLite / PostgreSQL storage (cost data)
  * - HTTP API + Prometheus /metrics endpoint
  */
 
 import { loadConfig } from "./config.js";
-import { initDb, closeDb } from "./storage/db.js";
+import { createStorage } from "./storage/index.js";
 import { startWsServer, stopWsServer } from "./ws-server.js";
 import { startHttpServer, stopHttpServer } from "./http-api.js";
 
 const config = loadConfig();
 
 console.log("[center] Flow-A2A Center starting...");
-console.log(`[center] DB: ${config.dbPath}`);
+console.log(`[center] DB: ${config.dbType === "postgres" ? "PostgreSQL" : config.dbPath}`);
 
-initDb(config.dbPath);
-startWsServer(config);
-startHttpServer(config);
+const storage = await createStorage(config);
+
+startWsServer(config, storage);
+startHttpServer(config, storage);
 
 console.log("[center] Ready.");
 
@@ -28,7 +29,7 @@ function shutdown() {
   console.log("\n[center] Shutting down...");
   stopWsServer();
   stopHttpServer();
-  closeDb();
+  storage.close();
   process.exit(0);
 }
 

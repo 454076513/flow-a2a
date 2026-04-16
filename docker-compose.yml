@@ -1,4 +1,18 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: flow
+      POSTGRES_PASSWORD: flow
+      POSTGRES_DB: flow_a2a
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flow -d flow_a2a"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   center:
     image: flow-a2a-center:local
     ports:

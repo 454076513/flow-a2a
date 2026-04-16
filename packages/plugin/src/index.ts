@@ -267,7 +267,7 @@ export default function register(api: any) {
   api.on(
     "llm_output",
     (
-      event: { runId: string; model: string; usage?: { input?: number; output?: number } },
+      event: { runId: string; model: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } },
       ctx: { sessionKey?: string; agentId?: string; trigger?: string; channelId?: string; conversationId?: string; sessionId?: string; messageProvider?: string }
     ) => {
       const record = trackLlmEvent(event, ctx);
@@ -372,11 +372,12 @@ export default function register(api: any) {
     log.info("[a2a] Lobby tool registered");
   }
 
-  // ── Register costclaw_status tool ─────────────────────────────────────────
+  // ── Register a2a_status tool ──────────────────────────────────────────────
   api.registerTool({
     name: "a2a_status",
     label: "Flow-A2A Status",
-    description: "Returns connection status and telemetry reporting info for the A2A plugin.",
+    description:
+      "Returns connection status, cost summary (today/month), cache token usage, and telemetry info for the A2A plugin.",
     parameters: Type.Object({}),
     async execute() {
       const connected = _globalClient?.isConnected() ?? false;
@@ -387,6 +388,39 @@ export default function register(api: any) {
         `• Online agents: ${online.length}`,
         `• Telemetry reporter: ${_globalReporter ? "active" : "inactive"}`,
       ];
+
+      // Try to fetch cost summary from center service
+      if (relayUrl) {
+        try {
+          const httpBase = relayUrl
+            .replace(/^ws:/, "http:")
+            .replace(/^wss:/, "https:")
+            .replace(/:\d+$/, ":3000"); // assume HTTP on port 3000
+          const todayStart = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+          const monthStart = new Date(new Date().toISOString().slice(0, 7) + "-01T00:00:00Z").getTime();
+
+          const [todayRes, monthRes] = await Promise.all([
+            fetch(`${httpBase}/api/summary?since=${todayStart}`).then(r => r.ok ? r.json() as any : null).catch(() => null),
+            fetch(`${httpBase}/api/summary?since=${monthStart}`).then(r => r.ok ? r.json() as any : null).catch(() => null),
+          ]);
+
+          if (todayRes) {
+            lines.push(`• Today: $${todayRes.totalCostUsd?.toFixed(4) ?? "?"} (${todayRes.totalCalls ?? 0} calls)`);
+          }
+          if (monthRes) {
+            lines.push(`• This month: $${monthRes.totalCostUsd?.toFixed(4) ?? "?"} (${monthRes.totalCalls ?? 0} calls)`);
+            lines.push(`• Models: ${monthRes.modelCount ?? 0}, Agents: ${monthRes.agentCount ?? 0}`);
+            const cacheRead = monthRes.totalCacheReadTokens ?? 0;
+            const cacheCreate = monthRes.totalCacheCreationTokens ?? 0;
+            if (cacheRead > 0 || cacheCreate > 0) {
+              lines.push(`• Cache tokens: read=${cacheRead.toLocaleString()}, create=${cacheCreate.toLocaleString()}`);
+            }
+          }
+        } catch {
+          // Center unreachable — show local-only info
+        }
+      }
+
       return {
         content: [{ type: "text" as const, text: lines.join("\n") }],
       };

@@ -60,6 +60,24 @@ export const MODEL_PRICING: Record<string, ModelPrice> = {
 
 // Canonical aliases for prefix matching (longest match wins)
 export const MODEL_ALIASES: Array<[string, string]> = [
+  // AWS Bedrock model IDs → canonical Anthropic names
+  ["us.anthropic.claude-opus-4-6",    "claude-opus-4-6"],
+  ["us.anthropic.claude-sonnet-4-6",  "claude-sonnet-4-6"],
+  ["us.anthropic.claude-haiku-4-5",   "claude-haiku-4-5"],
+  ["us.anthropic.claude-3-5-sonnet",  "claude-3-5-sonnet-20241022"],
+  ["us.anthropic.claude-3-5-haiku",   "claude-3-5-haiku-20241022"],
+  ["us.anthropic.claude-3-opus",      "claude-3-opus-20240229"],
+  ["us.anthropic.claude-3-sonnet",    "claude-3-sonnet-20240229"],
+  ["us.anthropic.claude-3-haiku",     "claude-3-haiku-20240307"],
+  ["anthropic.claude-opus-4-6",       "claude-opus-4-6"],
+  ["anthropic.claude-sonnet-4-6",     "claude-sonnet-4-6"],
+  ["anthropic.claude-haiku-4-5",      "claude-haiku-4-5"],
+  ["anthropic.claude-3-5-sonnet",     "claude-3-5-sonnet-20241022"],
+  ["anthropic.claude-3-5-haiku",      "claude-3-5-haiku-20241022"],
+  ["anthropic.claude-3-opus",         "claude-3-opus-20240229"],
+  ["anthropic.claude-3-sonnet",       "claude-3-sonnet-20240229"],
+  ["anthropic.claude-3-haiku",        "claude-3-haiku-20240307"],
+  // Standard aliases
   ["claude-3-5-sonnet", "claude-3-5-sonnet-20241022"],
   ["claude-3-5-haiku",  "claude-3-5-haiku-20241022"],
   ["claude-3-opus",     "claude-3-opus-20240229"],
@@ -85,7 +103,9 @@ function resolveModel(raw: string): string | null {
 
   if (MODEL_PRICING[lower]) return lower;
 
-  for (const [alias, canonical] of MODEL_ALIASES) {
+  // Alias match (longest prefix first)
+  const sorted = [...MODEL_ALIASES].sort((a, b) => b[0].length - a[0].length);
+  for (const [alias, canonical] of sorted) {
     if (lower.startsWith(alias)) return canonical;
   }
 
@@ -97,11 +117,18 @@ function resolveModel(raw: string): string | null {
   return null;
 }
 
+/**
+ * Compute cost for an LLM call, including cache tokens.
+ * Anthropic cache pricing: cache_read = 10% of input price, cache_creation = 125% of input price.
+ * Google cache pricing: cache_read ~25% of input price.
+ */
 export function computeCost(
   model: string,
   inputTokens: number,
   outputTokens: number,
-  telemetryCostUsd?: number
+  telemetryCostUsd?: number,
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
 ): CostResult {
   if (telemetryCostUsd != null && telemetryCostUsd > 0) {
     return { costUsd: telemetryCostUsd, source: "telemetry" };
@@ -113,9 +140,22 @@ export function computeCost(
   }
 
   const price = MODEL_PRICING[resolved];
+  const inputPer = price.inputPer1M / 1_000_000;
+  const outputPer = price.outputPer1M / 1_000_000;
+
+  // Determine cache pricing ratios based on provider
+  const isAnthropic = resolved.includes("claude");
+  const cacheReadRatio = isAnthropic ? 0.1 : 0.25;   // 10% for Anthropic, 25% for Google
+  const cacheCreateRatio = isAnthropic ? 1.25 : 1.0;  // 125% for Anthropic, same for others
+
+  const cacheRead = cacheReadTokens ?? 0;
+  const cacheCreate = cacheCreationTokens ?? 0;
+
   const costUsd =
-    (inputTokens / 1_000_000) * price.inputPer1M +
-    (outputTokens / 1_000_000) * price.outputPer1M;
+    inputTokens * inputPer +
+    outputTokens * outputPer +
+    cacheRead * inputPer * cacheReadRatio +
+    cacheCreate * inputPer * cacheCreateRatio;
 
   return { costUsd, source: "calculated" };
 }

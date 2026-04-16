@@ -86,13 +86,18 @@ function parseSessionKey(sessionKey?: string): { channel?: string; scope?: strin
 }
 
 export function trackLlmEvent(
-  event: { runId: string; model: string; usage?: { input?: number; output?: number } },
+  event: { runId: string; model: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } },
   ctx: { sessionKey?: string; agentId?: string; trigger?: string; channelId?: string; conversationId?: string; messageProvider?: string }
 ): TelemetryRecord | null {
   // Always track LLM calls even if usage is unavailable (provider may not report tokens)
   const inputTokens = event.usage?.input ?? 0;
   const outputTokens = event.usage?.output ?? 0;
-  const { costUsd, source } = computeCost(event.model, inputTokens, outputTokens);
+  const cacheReadTokens = event.usage?.cacheRead ?? 0;
+  const cacheCreationTokens = event.usage?.cacheWrite ?? 0;
+  const { costUsd, source } = computeCost(
+    event.model, inputTokens, outputTokens,
+    undefined, cacheReadTokens, cacheCreationTokens
+  );
   const channelHint = ctx.channelId || ctx.messageProvider;
   const trigger = getTriggerUser(ctx.sessionKey, channelHint);
 
@@ -118,6 +123,8 @@ export function trackLlmEvent(
     model: event.model,
     inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
     costUsd,
     costSource: source,
     trigger: ctx.trigger ?? "user",

@@ -9,8 +9,7 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientMessage, ServerMessage, LobsterInfo, MentionTarget, TelemetryRecord } from "@flow-a2a/shared";
 import type { CenterConfig } from "./config.js";
-import { upsertAgent, removeAgent, touchAgent } from "./storage/queries.js";
-import { insertTelemetryBatch } from "./storage/queries.js";
+import type { Storage } from "./storage/index.js";
 import { recordLlmCost, recordToolCall, recordMessage, setAgentsOnline, setWsConnections } from "./metrics.js";
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -36,9 +35,11 @@ let maxHistory = 200;
 
 let wss: WebSocketServer | null = null;
 let staleTimer: ReturnType<typeof setInterval> | null = null;
+let _storage: Storage;
 
-export function startWsServer(config: CenterConfig): WebSocketServer {
+export function startWsServer(config: CenterConfig, storage: Storage): WebSocketServer {
   maxHistory = config.maxHistory;
+  _storage = storage;
   const relayToken = config.relayToken;
 
   wss = new WebSocketServer({ port: config.wsPort });
@@ -64,7 +65,7 @@ export function startWsServer(config: CenterConfig): WebSocketServer {
         case "ping":
           if (registeredId && lobsters.has(registeredId)) {
             lobsters.get(registeredId)!.lastPing = Date.now();
-            touchAgent(registeredId);
+            _storage.touchAgent(registeredId);
           }
           send(ws, { type: "pong" });
           break;
@@ -80,7 +81,7 @@ export function startWsServer(config: CenterConfig): WebSocketServer {
       if (registeredId && lobsters.has(registeredId)) {
         const info = lobsters.get(registeredId)!;
         cleanup(registeredId);
-        removeAgent(registeredId);
+        _storage.removeAgent(registeredId);
         broadcast({ type: "leave", lobsterId: registeredId, name: info.name, ts: Date.now() }, registeredId);
         console.log(`[center] ${info.name} left [${lobsters.size} online]`);
         setAgentsOnline(lobsters.size);
@@ -101,7 +102,7 @@ export function startWsServer(config: CenterConfig): WebSocketServer {
         console.log(`[center] Evicting stale: ${info.name}`);
         try { info.ws.close(4002, "stale"); } catch {}
         cleanup(id);
-        removeAgent(id);
+        _storage.removeAgent(id);
         broadcast({ type: "leave", lobsterId: id, name: info.name, ts: Date.now() });
       }
     }
@@ -145,7 +146,7 @@ function handleRegister(ws: WebSocket, msg: ClientMessage & { type: "register" }
   botNameIndex.set(info.name.toLowerCase(), lobsterId);
 
   // Persist agent registration
-  upsertAgent(lobsterId, info.name, (meta as any)?.agentId, (meta as any)?.instanceId, info.botOpenId ?? undefined);
+  _storage.upsertAgent(lobsterId, info.name, (meta as any)?.agentId, (meta as any)?.instanceId, info.botOpenId ?? undefined);
 
   send(ws, { type: "registered", lobsterId, lobsters: listLobsters() });
   broadcast({ type: "join", lobsterId, name: info.name, ts: Date.now() }, lobsterId);
@@ -227,7 +228,7 @@ function handleHistory(ws: WebSocket, senderId: string | null) {
   send(ws, { type: "history", messages: lobbyHistory.slice(-50) });
 }
 
-function handleTelemetry(ws: WebSocket, msg: { batch: TelemetryRecord[] }, senderId: string | null) {
+async function handleTelemetry(ws: WebSocket, msg: { batch: TelemetryRecord[] }, senderId: string | null) {
   if (!senderId || !lobsters.has(senderId)) return send(ws, { type: "error", message: "Not registered" });
   const sender = lobsters.get(senderId)!;
 
@@ -235,12 +236,12 @@ function handleTelemetry(ws: WebSocket, msg: { batch: TelemetryRecord[] }, sende
     return send(ws, { type: "telemetry_ack", accepted: 0, errors: ["Empty batch"] });
   }
 
-  // Persist to SQLite
-  const { accepted, errors } = insertTelemetryBatch(
+  // Persist to storage
+  const { accepted, errors } = await _storage.insertTelemetryBatch(
     sender.name,
     (sender.meta as any)?.agentId,
     (sender.meta as any)?.instanceId,
-    msg.batch
+    msg.batch,
   );
 
   // Update Prometheus metrics
