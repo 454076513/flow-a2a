@@ -13,6 +13,16 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   center:
     image: flow-a2a-center:local
     ports:
@@ -21,10 +31,15 @@ services:
     environment:
       WS_PORT: "9876"
       HTTP_PORT: "3000"
-      DB_PATH: "/data/flow-a2a-center.db"
+      DB_TYPE: "postgres"
+      DATABASE_URL: "postgres://flow:flow@postgres:5432/flow_a2a"
+      REDIS_URL: "redis://redis:6379"
       RELAY_TOKEN: ""
-    volumes:
-      - ./test/data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s

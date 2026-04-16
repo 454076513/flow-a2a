@@ -4,6 +4,7 @@ export interface CenterConfig {
   dbType: "sqlite" | "postgres";
   dbPath: string;
   postgresUrl: string;
+  redisUrl: string;
   relayToken: string;
   maxHistory: number;
 }
@@ -15,6 +16,7 @@ export function loadConfig(): CenterConfig {
     dbType: (process.env.DB_TYPE as "sqlite" | "postgres") || "sqlite",
     dbPath: process.env.DB_PATH || "./flow-a2a-center.db",
     postgresUrl: process.env.DATABASE_URL || "",
+    redisUrl: process.env.REDIS_URL || "",
     relayToken: process.env.RELAY_TOKEN || "",
     maxHistory: parseInt(process.env.MAX_HISTORY || "200", 10),
   };

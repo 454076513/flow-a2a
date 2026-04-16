@@ -19,6 +19,8 @@ RUN echo '{ \
   "dependencies": { \
     "@flow-a2a/shared": "file:../shared", \
     "better-sqlite3": "^9.4.3", \
+    "ioredis": "^5.4.0", \
+    "pg": "^8.13.0", \
     "prom-client": "^15.1.0", \
     "ws": "^8.18.0" \
   } \

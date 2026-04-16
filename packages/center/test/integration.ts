@@ -10,11 +10,14 @@
 import WebSocket from "ws";
 import { SqliteStorage } from "../src/storage/sqlite.js";
 import { PostgresStorage } from "../src/storage/postgres.js";
+import { LocalPubSub } from "../src/pubsub/local.js";
+import { RedisPubSub } from "../src/pubsub/redis.js";
 import { startWsServer, stopWsServer } from "../src/ws-server.js";
 import { startHttpServer, stopHttpServer } from "../src/http-api.js";
 import type { CenterConfig } from "../src/config.js";
 import type { TelemetryRecord, ClientMessage, ServerMessage } from "../../shared/src/types.js";
 import type { Storage } from "../src/storage/index.js";
+import type { PubSub } from "../src/pubsub/index.js";
 import { registry } from "../src/metrics.js";
 import fs from "fs";
 import path from "path";
@@ -25,9 +28,12 @@ import os from "os";
 const WS_PORT = 19876;
 const HTTP_PORT = 13100;
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const REDIS_URL = process.env.REDIS_URL || "";
 const USE_POSTGRES = DATABASE_URL.length > 0;
+const USE_REDIS = REDIS_URL.length > 0;
 let dbPath: string;
 let storage: Storage;
+let pubsub: PubSub;
 
 function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
@@ -115,6 +121,7 @@ async function setup() {
     dbType: USE_POSTGRES ? "postgres" : "sqlite",
     dbPath,
     postgresUrl: DATABASE_URL,
+    redisUrl: REDIS_URL,
     relayToken: "",
     maxHistory: 100,
   };
@@ -129,7 +136,15 @@ async function setup() {
     storage = new SqliteStorage(dbPath);
   }
 
-  startWsServer(config, storage);
+  if (USE_REDIS) {
+    console.log(`[test] Using Redis: ${REDIS_URL}`);
+    pubsub = new RedisPubSub(REDIS_URL, `test-${Date.now()}`);
+  } else {
+    console.log(`[test] Using LocalPubSub`);
+    pubsub = new LocalPubSub();
+  }
+
+  startWsServer(config, storage, pubsub);
   startHttpServer(config, storage);
   await delay(500); // let servers start
 }
@@ -137,6 +152,7 @@ async function setup() {
 async function teardown() {
   stopWsServer();
   stopHttpServer();
+  await pubsub.close();
   await storage.close();
   if (!USE_POSTGRES) {
     try { fs.unlinkSync(dbPath); } catch {}

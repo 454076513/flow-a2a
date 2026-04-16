@@ -11,20 +11,25 @@ Flow-A2A is an OpenClaw plugin + center service combo that unifies **real-time a
 - **Trigger User Attribution** -- Attributes costs to the user who triggered the call (Feishu @bot, DM, lobby mention)
 - **Channel Context** -- Distinguishes channels (feishu/reef/api), scopes (group/p2p/lobby/dm), and conversation IDs
 - **Real-time Telemetry** -- Batched telemetry reporting to center service with offline buffering
-- **SQLite + Prometheus** -- Persistent storage + standard metrics, ready for Grafana
+- **SQLite / PostgreSQL** -- Pluggable storage backend, ready for single-instance or cluster
+- **Redis Cluster Mode** -- Multi-instance deployment with Redis pub/sub for agent registry and message relay
+- **Prometheus Metrics** -- Standard metrics, ready for Grafana
 - **Web Dashboard** -- Built-in dashboard for live cost monitoring, agent status, and chat history
 - **PII Redaction** -- 10+ built-in sensitive data redaction rules with custom rule support
 - **Feishu Bridge** -- Automatic message forwarding between agents and Feishu groups
 
 ## Architecture
 
+### Single Instance
+
 ```
 ┌──────────────────────────────────────────────────┐
 │              Center Service (Node.js)             │
 │                                                   │
-│  WebSocket Relay <──> SQLite    HTTP API          │
-│  (agent comm +       (costs,    (/api/* + /metrics│
-│   telemetry)          agents)    + /dashboard)    │
+│  WebSocket Relay <──> SQLite/PG   HTTP API        │
+│  (agent comm +       (costs,      (/api/* +       │
+│   telemetry)          agents)      /metrics +     │
+│                                    /dashboard)    │
 └────────────┬──────────────────────────────────────┘
              │ ws://center:9876
      ┌───────┼───────┐
@@ -33,6 +38,28 @@ Flow-A2A is an OpenClaw plugin + center service combo that unifies **real-time a
   │OC #1│ │OC#2│ │OC #N│   <- OpenClaw instances
   │+a2a │ │+a2a│ │+a2a │     each with flow-a2a plugin
   └─────┘ └────┘ └─────┘
+```
+
+### Cluster Mode (with Redis)
+
+```
+                    ┌──────────┐
+                    │  Redis   │  pub/sub + agent registry
+                    └────┬─────┘  + lobby history
+          ┌──────────────┼──────────────┐
+          │              │              │
+  ┌───────┴───────┐ ┌───┴────────┐ ┌───┴────────┐
+  │  Center #1    │ │ Center #2  │ │ Center #N  │
+  │  (WS + HTTP)  │ │ (WS + HTTP)│ │ (WS + HTTP)│
+  └───────┬───────┘ └───┬────────┘ └───┬────────┘
+          │             │              │
+      ┌───┴───┐    ┌────┴──┐     ┌────┴──┐
+      │ OC #1 │    │ OC #2 │     │ OC #N │
+      └───────┘    └───────┘     └───────┘
+                        │
+                 ┌──────┴──────┐
+                 │ PostgreSQL  │  persistent storage
+                 └─────────────┘
 ```
 
 ## Quick Start
@@ -119,9 +146,16 @@ flow-a2a/
 │           ├── http-api.ts      # REST API + dashboard
 │           ├── metrics.ts       # Prometheus metric definitions
 │           ├── dashboard-html.ts# Embedded SPA dashboard
-│           └── storage/
-│               ├── db.ts        # SQLite init + migrations
-│               └── queries.ts   # Query helpers
+│           ├── storage/
+│           │   ├── interface.ts # Storage interface + query types
+│           │   ├── index.ts     # Factory: createStorage(config)
+│           │   ├── sqlite.ts    # SQLite backend (better-sqlite3)
+│           │   └── postgres.ts  # PostgreSQL backend (pg)
+│           └── pubsub/
+│               ├── interface.ts # PubSub interface + cluster types
+│               ├── index.ts     # Factory: createPubSub(config)
+│               ├── local.ts     # In-memory (single instance)
+│               └── redis.ts     # Redis backend (ioredis)
 │
 ├── e2e/
 │   ├── e2e.sh                   # E2E test: single agent
@@ -153,13 +187,49 @@ flow-a2a/
 
 ## Center Configuration
 
-| Environment Variable | Default                | Description                             |
-| -------------------- | ---------------------- | --------------------------------------- |
-| `WS_PORT`            | `9876`                 | WebSocket relay port                    |
-| `HTTP_PORT`          | `3000`                 | HTTP API port                           |
-| `DB_PATH`            | `./flow-a2a-center.db` | SQLite database path                    |
-| `RELAY_TOKEN`        | _(empty)_              | WebSocket auth token (empty = no auth)  |
-| `MAX_HISTORY`        | `200`                  | Lobby history message count (in-memory) |
+| Environment Variable | Default                | Description                                        |
+| -------------------- | ---------------------- | -------------------------------------------------- |
+| `WS_PORT`            | `9876`                 | WebSocket relay port                               |
+| `HTTP_PORT`          | `3000`                 | HTTP API port                                      |
+| `DB_TYPE`            | `sqlite`               | Storage backend: `sqlite` or `postgres`            |
+| `DB_PATH`            | `./flow-a2a-center.db` | SQLite database file path (when `DB_TYPE=sqlite`)  |
+| `DATABASE_URL`       | _(empty)_              | PostgreSQL connection string (when `DB_TYPE=postgres`) |
+| `REDIS_URL`          | _(empty)_              | Redis URL for cluster mode (empty = single-instance) |
+| `RELAY_TOKEN`        | _(empty)_              | WebSocket auth token (empty = no auth)             |
+| `MAX_HISTORY`        | `200`                  | Lobby history message count                        |
+
+### Deployment Modes
+
+**Single Instance (default)** -- no extra dependencies:
+
+```bash
+# SQLite storage, in-process agent registry and lobby history
+WS_PORT=9876 HTTP_PORT=3000 node dist/index.js
+```
+
+**Single Instance + PostgreSQL** -- use PostgreSQL for persistent storage:
+
+```bash
+DB_TYPE=postgres \
+DATABASE_URL=postgres://user:pass@localhost:5432/flow_a2a \
+node dist/index.js
+```
+
+**Cluster Mode** -- multiple center instances with shared state via Redis + PostgreSQL:
+
+```bash
+DB_TYPE=postgres \
+DATABASE_URL=postgres://user:pass@pg-host:5432/flow_a2a \
+REDIS_URL=redis://redis-host:6379 \
+node dist/index.js
+```
+
+When `REDIS_URL` is set, center uses Redis for:
+- **Agent registry** -- all instances share a global agent list (Redis hash)
+- **Lobby history** -- shared lobby message history (Redis list)
+- **Message relay** -- cross-instance DM/Feishu delivery and broadcast (Redis pub/sub)
+
+This allows agents connected to different center instances to communicate with each other seamlessly.
 
 ## API Endpoints
 
@@ -185,7 +255,7 @@ All `/api/costs/*` endpoints accept a `since` parameter (Unix ms timestamp). The
 pnpm build
 pnpm docker:build
 
-# Test environment (Center + 2 OpenClaw agents)
+# Test environment (Center + PostgreSQL + Redis + 2 OpenClaw agents)
 pnpm docker:up
 
 # Access
@@ -196,6 +266,16 @@ pnpm docker:up
 # Tear down
 pnpm docker:down
 ```
+
+### docker-compose.yml Services
+
+| Service      | Port          | Description                          |
+| ------------ | ------------- | ------------------------------------ |
+| `postgres`   | `15432:5432`  | PostgreSQL 16 for persistent storage |
+| `redis`      | `16379:6379`  | Redis 7 for cluster state            |
+| `center`     | `9876`, `3100`| Center service (WS + HTTP)           |
+| `openclaw-1` | `28789`       | OpenClaw agent instance #1           |
+| `openclaw-2` | `38789`       | OpenClaw agent instance #2           |
 
 ## License
 
